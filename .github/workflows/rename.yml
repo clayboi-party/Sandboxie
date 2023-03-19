@@ -1,55 +1,44 @@
-name: Rename and Build
+name: Build Custom Sandboxie
 
 on:
   workflow_dispatch:
 
 jobs:
-  rename_and_build:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: windows-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Setup Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
 
-    - name: Install Python dependencies
-      run: pip install requests
-
-    - name: Rename Sandboxie references
+    - name: Rename references
       run: |
-        python -c "
-import os
-import re
+        (Get-Content -Path .\Sandboxie\core\dl\pnp.c) -replace 'SbieDrv', 'MyCustomDrv' | Set-Content -Path .\Sandboxie\core\dl\pnp.c
+        (Get-Content -Path .\Sandboxie\core\svc\Version.h) -replace 'SbieDll', 'MyCustomDll' | Set-Content -Path .\Sandboxie\core\svc\Version.h
 
-def rename_files_and_contents(path, old, new):
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            old_file_path = os.path.join(root, file)
-            new_file_path = os.path.join(root, file.replace(old, new))
+    - name: Build Sandboxie
+      run: msbuild /p:Configuration=Release /p:Platform=x64 Sandboxie.sln
 
-            with open(old_file_path, 'r', encoding='utf8') as f:
-                content = f.read()
+    - name: Download latest official release
+      run: |
+        $url = "https://github.com/sandboxie-plus/Sandboxie/releases/latest/download/Sandboxie-Classic-x64-v5.55.6.exe"
+        Invoke-WebRequest -Uri $url -OutFile Sandboxie-Latest.exe
 
-            content = content.replace(old, new)
+    - name: Extract signed driver
+      run: |
+        & .\Sandboxie-Latest.exe /S /ExtractCab
+        $driverPath = Get-ChildItem -Path .\Sandboxie-Classic | Where-Object { $_.Name -like "SbieDrv.sys" } | Select-Object -ExpandProperty FullName
+        Move-Item -Path $driverPath -Destination .\Sandboxie\core\drv\SbieDrv.sys
 
-            with open(new_file_path, 'w', encoding='utf8') as f:
-                f.write(content)
+    - name: Zip the output
+      run: |
+        Compress-Archive -Path .\Sandboxie\* -DestinationPath CustomSandboxie.zip
 
-            if old_file_path != new_file_path:
-                os.remove(old_file_path)
-
-rename_files_and_contents('.', 'Sandboxie', 'MyNewName')
-"
-
-    - name: Build MyNewName
-      # Add your build steps here
-
-    - name: Create artifacts
-      # Add your artifact creation steps here
-
-    - name: Upload artifacts
-      # Add your artifact upload steps here
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: custom-sandboxie
+        path: CustomSandboxie.zip
