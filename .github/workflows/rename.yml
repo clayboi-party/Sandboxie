@@ -1,0 +1,55 @@
+name: Rename and Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rename_and_build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install Python dependencies
+      run: pip install requests
+
+    - name: Rename Sandboxie references
+      run: |
+        python -c "
+import os
+import re
+
+def rename_files_and_contents(path, old, new):
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            old_file_path = os.path.join(root, file)
+            new_file_path = os.path.join(root, file.replace(old, new))
+
+            with open(old_file_path, 'r', encoding='utf8') as f:
+                content = f.read()
+
+            content = content.replace(old, new)
+
+            with open(new_file_path, 'w', encoding='utf8') as f:
+                f.write(content)
+
+            if old_file_path != new_file_path:
+                os.remove(old_file_path)
+
+rename_files_and_contents('.', 'Sandboxie', 'MyNewName')
+"
+
+    - name: Build MyNewName
+      # Add your build steps here
+
+    - name: Create artifacts
+      # Add your artifact creation steps here
+
+    - name: Upload artifacts
+      # Add your artifact upload steps here
